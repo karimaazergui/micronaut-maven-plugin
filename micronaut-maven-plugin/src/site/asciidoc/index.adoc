@@ -14,7 +14,9 @@ This plugin has the following features:
 
 === Usage
 
-Add the plugin to your `build/plugins` section:
+It is recommended to use this plugin in combination with the https://central.sonatype.com/artifact/io.micronaut.platform/micronaut-parent[Micronaut Parent POM].
+
+Then, declare the plugin to your `build/plugins` section:
 
 [source,xml,subs="verbatim,attributes"]
 ----
