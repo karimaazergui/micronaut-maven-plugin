@@ -1,6 +1,11 @@
-FROM fnproject/fn-java-fdk:jre17-latest
+ARG BASE_JAVA_IMAGE=eclipse-temurin:21-jre
+
+FROM fnproject/fn-java-fdk:jre17-latest AS fnfdk
+
+FROM ${BASE_JAVA_IMAGE}
+COPY --from=fnfdk /function /function
 WORKDIR /function
-COPY classes /function/app/
-COPY dependency/* /function/app/
-CMD ["io.micronaut.oraclecloud.function.http.HttpFunction::handleRequest"]
-ENTRYPOINT ["/usr/java/latest/bin/java", "-XX:-UsePerfData", "-XX:+UseSerialGC", "-Xshare:on", "-Djava.awt.headless=true", "-Djava.library.path=/function/runtime/lib", "-cp", "/function/app/classes:/function/app/libs/*:/function/app/resources:/function/runtime/*", "com.fnproject.fn.runtime.EntryPoint"]
+COPY classes /function/app/classes
+COPY dependency/* /function/app/libs/
+CMD ["example.micronaut.Function::handleRequest"]
+ENTRYPOINT ["java", "-XX:-UsePerfData", "-XX:+UseSerialGC", "-Xshare:auto", "-Djava.awt.headless=true", "-Djava.library.path=/function/runtime/lib", "-cp", "/function/app/classes:/function/app/libs/*:/function/app/resources:/function/runtime/*", "com.fnproject.fn.runtime.EntryPoint"]

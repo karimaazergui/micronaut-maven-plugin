@@ -79,7 +79,7 @@ public abstract class AbstractTestResourcesMojo extends TestResourcesConfigurati
     protected Integer explicitPort;
 
     /**
-     * Configures the maximum amount of time to wait for the server to start a test resource. Some containeres may take
+     * Configures the maximum amount of time to wait for the server to start a test resource. Some containers may take
      * a long amount of time to start with slow internet connections.
      */
     @Parameter(property = CONFIG_PROPERTY_PREFIX + "client-timeout", defaultValue = DEFAULT_CLIENT_TIMEOUT)
@@ -88,10 +88,23 @@ public abstract class AbstractTestResourcesMojo extends TestResourcesConfigurati
     /**
      * Configures the duration after which the test resources service will automatically shut down if it doesn't
      * get any request.
+     *
      * @since 4.2.0
      */
     @Parameter(property = CONFIG_PROPERTY_PREFIX + "server-idle-timeout-minutes")
     protected Integer serverIdleTimeoutMinutes = Integer.valueOf(DEFAULT_CLIENT_TIMEOUT);
+
+    /**
+     * System properties that will be passed to the Test Resources service, e.g.
+     * <pre>
+     * &lt;testResourcesSystemProperties&gt;
+     *     &lt;docker.check.timeout.seconds&gt;30&lt;/docker.check.timeout.seconds&gt;
+     * &lt;/testResourcesSystemProperties&gt;
+     * </pre>
+     * @since 4.7.2
+     */
+    @Parameter
+    protected Map<String, String> testResourcesSystemProperties;
 
     public static Path serverSettingsDirectoryOf(Path buildDir) {
         return buildDir.resolve("../.micronaut/test-resources");

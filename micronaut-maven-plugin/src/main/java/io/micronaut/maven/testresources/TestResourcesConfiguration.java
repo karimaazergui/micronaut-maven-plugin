@@ -29,22 +29,23 @@ public class TestResourcesConfiguration {
     public static final String CONFIG_PROPERTY_PREFIX = "micronaut.test.resources.";
 
     private static final String PROPERTY_ENABLED = "enabled";
+    public static final String TEST_RESOURCES_ENABLED_PROPERTY = CONFIG_PROPERTY_PREFIX + PROPERTY_ENABLED;
 
     /**
      * Whether to enable or disable Micronaut test resources support.
      */
-    @Parameter(property =  CONFIG_PROPERTY_PREFIX + PROPERTY_ENABLED, defaultValue = DISABLED)
+    @Parameter(property = TEST_RESOURCES_ENABLED_PROPERTY, defaultValue = DISABLED)
     protected boolean testResourcesEnabled;
 
     /**
      * Whether the test resources service should be shared between independent builds
-     * (e.g different projects, even built with different build tools).
+     * (e.g. different projects, even built with different build tools).
      */
     @Parameter(property = CONFIG_PROPERTY_PREFIX + "shared", defaultValue = DISABLED)
     protected boolean shared;
 
     /**
-     * Allows configuring a namespace for the shared test resources server. This can be used in case it makes sense to
+     * Allows configuring a namespace for the shared test-resources server. This can be used in case it makes sense to
      * have different instances of shared services, for example when independent builds sets share different services.
      *
      * @since 3.5.1
@@ -60,6 +61,14 @@ public class TestResourcesConfiguration {
      */
     @Parameter(property = CONFIG_PROPERTY_PREFIX + "debug-server", defaultValue = DISABLED)
     protected boolean debugServer;
+
+    /**
+     * Whether the test resources server should be started in the foreground.
+     *
+     * @since 4.7.0
+     */
+    @Parameter(property = CONFIG_PROPERTY_PREFIX + "foreground", defaultValue = DISABLED)
+    protected boolean foreground;
 
     /**
      * @return Whether to enable or disable Micronaut test resources support.

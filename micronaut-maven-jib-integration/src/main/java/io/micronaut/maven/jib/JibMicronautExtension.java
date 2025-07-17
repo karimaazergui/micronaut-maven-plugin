@@ -15,16 +15,30 @@
  */
 package io.micronaut.maven.jib;
 
-import com.google.cloud.tools.jib.api.buildplan.*;
+import com.google.cloud.tools.jib.api.buildplan.AbsoluteUnixPath;
+import com.google.cloud.tools.jib.api.buildplan.ContainerBuildPlan;
+import com.google.cloud.tools.jib.api.buildplan.FileEntriesLayer;
+import com.google.cloud.tools.jib.api.buildplan.FileEntry;
+import com.google.cloud.tools.jib.api.buildplan.LayerObject;
+import com.google.cloud.tools.jib.api.buildplan.Platform;
+import com.google.cloud.tools.jib.api.buildplan.Port;
 import com.google.cloud.tools.jib.buildplan.UnixPathParser;
 import com.google.cloud.tools.jib.maven.extension.JibMavenPluginExtension;
 import com.google.cloud.tools.jib.maven.extension.MavenData;
 import com.google.cloud.tools.jib.plugins.extension.ExtensionLogger;
 import io.micronaut.core.util.StringUtils;
+import io.micronaut.maven.core.DockerBuildStrategy;
 import io.micronaut.maven.core.MicronautRuntime;
 import io.micronaut.maven.services.ApplicationConfigurationService;
+import org.apache.maven.project.MavenProject;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Jib extension to support building Docker images.
@@ -34,8 +48,10 @@ import java.util.*;
  */
 public class JibMicronautExtension implements JibMavenPluginExtension<Void> {
 
-    public static final String DEFAULT_BASE_IMAGE = "eclipse-temurin:17-alpine";
+    public static final String DEFAULT_JAVA17_BASE_IMAGE = "eclipse-temurin:17-jre";
+    public static final String DEFAULT_JAVA21_BASE_IMAGE = "eclipse-temurin:21-jre";
     private static final String LATEST_TAG = "latest";
+    private static final String JDK_VERSION = "maven.compiler.target";
 
     @Override
     public Optional<Class<Void>> getExtraConfigType() {
@@ -50,22 +66,31 @@ public class JibMicronautExtension implements JibMavenPluginExtension<Void> {
         ContainerBuildPlan.Builder builder = buildPlan.toBuilder();
         MicronautRuntime runtime = MicronautRuntime.valueOf(mavenData.getMavenProject().getProperties().getProperty(MicronautRuntime.PROPERTY, "none").toUpperCase());
 
-        JibConfigurationService jibConfigurationService = new JibConfigurationService(mavenData.getMavenProject());
+        var jibConfigurationService = new JibConfigurationService(mavenData.getMavenProject());
 
+        String baseImage = buildPlan.getBaseImage();
         if (StringUtils.isEmpty(buildPlan.getBaseImage())) {
-            builder.setBaseImage(DEFAULT_BASE_IMAGE);
+            baseImage = determineBaseImage(getJdkVersion(mavenData.getMavenProject()), runtime.getBuildStrategy());
+            builder.setBaseImage(baseImage);
+        }
+        logger.log(ExtensionLogger.LogLevel.LIFECYCLE, "Using base image: " + baseImage);
+
+        if (buildPlan.getExposedPorts() == null || buildPlan.getExposedPorts().isEmpty()) {
+            var applicationConfigurationService = new ApplicationConfigurationService(mavenData.getMavenProject());
+            try {
+                int port = Integer.parseInt(applicationConfigurationService.getServerPort());
+                if (port > 0) {
+                    logger.log(ExtensionLogger.LogLevel.LIFECYCLE, "Exposing port: " + port);
+                    builder.addExposedPort(Port.tcp(port));
+                }
+            } catch (NumberFormatException e) {
+                // ignore, can't automatically expose port
+                logger.log(ExtensionLogger.LogLevel.LIFECYCLE, "Dynamically resolved port present. Ensure the port is correctly exposed in the <container> configuration. See https://github.com/GoogleContainerTools/jib/tree/master/jib-maven-plugin#example for an example.");
+            }
         }
 
-        ApplicationConfigurationService applicationConfigurationService = new ApplicationConfigurationService(mavenData.getMavenProject());
-        try {
-            int port = Integer.parseInt(applicationConfigurationService.getServerPort());
-            if (port > 0) {
-                logger.log(ExtensionLogger.LogLevel.LIFECYCLE, "Exposing port: " + port);
-                builder.addExposedPort(Port.tcp(port));
-            }
-        } catch (NumberFormatException e) {
-            // ignore, can't automatically expose port
-            logger.log(ExtensionLogger.LogLevel.LIFECYCLE, "Dynamically resolved port present. Ensure the port is correctly exposed in the <container> configuration. See https://github.com/GoogleContainerTools/jib/tree/master/jib-maven-plugin#example for an example.");
+        if (buildPlan.getPlatforms() == null || buildPlan.getPlatforms().isEmpty()) {
+            builder.setPlatforms(Set.of(detectPlatform()));
         }
 
         switch (runtime.getBuildStrategy()) {
@@ -76,13 +101,15 @@ public class JibMicronautExtension implements JibMavenPluginExtension<Void> {
                 if (cmd.isEmpty()) {
                     cmd = Collections.singletonList("io.micronaut.oraclecloud.function.http.HttpFunction::handleRequest");
                 }
-                String projectFnVersion = determineProjectFnVersion(System.getProperty("java.version"));
-                builder.setBaseImage("fnproject/fn-java-fdk:" + projectFnVersion)
-                        .setWorkingDirectory(AbsoluteUnixPath.get(jibConfigurationService.getWorkingDirectory().orElse("/function")))
-                        .setEntrypoint(buildProjectFnEntrypoint())
-                        .setCmd(cmd);
+                builder.setWorkingDirectory(AbsoluteUnixPath.get(jibConfigurationService.getWorkingDirectory().orElse("/function")))
+                    .setEntrypoint(buildProjectFnEntrypoint())
+                    .setCmd(cmd);
             }
             case LAMBDA -> {
+                //TODO Leverage AWS Base images:
+                // https://docs.aws.amazon.com/lambda/latest/dg/java-image.html
+                // https://docs.aws.amazon.com/lambda/latest/dg/images-create.html
+                // https://docs.aws.amazon.com/lambda/latest/dg/images-test.html
                 List<String> entrypoint = buildPlan.getEntrypoint();
                 Objects.requireNonNull(entrypoint).set(entrypoint.size() - 1, "io.micronaut.function.aws.runtime.MicronautLambdaRuntime");
                 builder.setEntrypoint(entrypoint);
@@ -95,11 +122,11 @@ public class JibMicronautExtension implements JibMavenPluginExtension<Void> {
     }
 
     public static List<String> buildProjectFnEntrypoint() {
-        List<String> entrypoint = new ArrayList<>(9);
-        entrypoint.add("/usr/java/latest/bin/java");
+        var entrypoint = new ArrayList<String>(9);
+        entrypoint.add("java");
         entrypoint.add("-XX:-UsePerfData");
         entrypoint.add("-XX:+UseSerialGC");
-        entrypoint.add("-Xshare:on");
+        entrypoint.add("-Xshare:auto");
         entrypoint.add("-Djava.awt.headless=true");
         entrypoint.add("-Djava.library.path=/function/runtime/lib");
         entrypoint.add("-cp");
@@ -110,15 +137,29 @@ public class JibMicronautExtension implements JibMavenPluginExtension<Void> {
 
     public static String determineProjectFnVersion(String javaVersion) {
         int majorVersion = Integer.parseInt(javaVersion.split("\\.")[0]);
-        if (majorVersion >= 17) {
-            return "jre17-latest";
+        if (majorVersion <= 21 && majorVersion > 17) {
+            return "21-jre";
+        } else if (majorVersion == 17) {
+            return "17-jre";
         } else {
             return LATEST_TAG;
         }
     }
 
+    public static String determineBaseImage(String jdkVersion, DockerBuildStrategy buildStrategy) {
+        int javaVersion = Integer.parseInt(jdkVersion);
+        return switch (buildStrategy) {
+            case LAMBDA -> "public.ecr.aws/lambda/java:" + javaVersion;
+            default -> javaVersion == 17 ? DEFAULT_JAVA17_BASE_IMAGE : DEFAULT_JAVA21_BASE_IMAGE;
+        };
+    }
+
+    public static String getJdkVersion(MavenProject project) {
+        return System.getProperty(JDK_VERSION, project.getProperties().getProperty(JDK_VERSION));
+    }
+
     static LayerObject remapLayer(LayerObject layerObject) {
-        FileEntriesLayer originalLayer = (FileEntriesLayer) layerObject;
+        var originalLayer = (FileEntriesLayer) layerObject;
         FileEntriesLayer.Builder builder = FileEntriesLayer.builder().setName(originalLayer.getName());
         for (FileEntry originalEntry : originalLayer.getEntries()) {
             builder.addEntry(remapEntry(originalEntry, layerObject.getName()));
@@ -138,7 +179,12 @@ public class JibMicronautExtension implements JibMavenPluginExtension<Void> {
         }
 
         return new FileEntry(originalEntry.getSourceFile(), newPath, originalEntry.getPermissions(),
-                originalEntry.getModificationTime(), originalEntry.getOwnership());
+            originalEntry.getModificationTime(), originalEntry.getOwnership());
+    }
+
+    private Platform detectPlatform() {
+        String arch = System.getProperty("os.arch").equals("aarch64") ? "arm64" : "amd64";
+        return new Platform(arch, "linux");
     }
 
 }

@@ -1,7 +1,7 @@
 # Micronaut Maven Plugin
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.micronaut.maven/micronaut-maven-plugin.svg?label=Maven%20Central)](https://search.maven.org/artifact/io.micronaut.maven/micronaut-maven-plugin)
-[![Build Status](https://github.com/micronaut-projects/micronaut-maven-plugin/workflows/Snapshot/badge.svg)](https://github.com/micronaut-projects/micronaut-maven-plugin/actions)
+[![Build Status](https://github.com/micronaut-projects/micronaut-maven-plugin/actions/workflows/snapshot.yml/badge.svg)](https://github.com/micronaut-projects/micronaut-maven-plugin/actions)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=io.micronaut.maven%3Amicronaut-maven-plugin-parent&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=io.micronaut.maven%3Amicronaut-maven-plugin-parent)
 [![Revved up by Develocity](https://img.shields.io/badge/Revved%20up%20by-Develocity-06A0CE?logo=Gradle&labelColor=02303A)](https://ge.micronaut.io/scans)
 
@@ -61,3 +61,9 @@ mvnDebug package -Dpackaging=docker
 ```
 
 Then in your IDE, attach a remote debugger to port 8000.
+
+### Preparing for a new minor/major version
+
+```shell
+mvn release:update-versions -DautoVersionSubmodules=true -DdevelopmentVersion=4.6.0-SNAPSHOT
+```

@@ -9,10 +9,14 @@ This plugin has the following features:
 5. link:examples/aot.html[Using Micronaut AOT].
 6. link:examples/test-resources.html[Integration with Micronaut Test Resources].
 7. link:examples/openapi.html[Integration with Micronaut OpenAPI].
+8. link:examples/bean-import.html[Importing beans from project dependencies].
+9. link:examples/jsonschema.html[Generating Sources from JSON Schema]
 
 === Usage
 
-Add the plugin to your `build/plugins` section:
+It is recommended to use this plugin in combination with the https://central.sonatype.com/artifact/io.micronaut.platform/micronaut-parent[Micronaut Parent POM].
+
+Then, declare the plugin to your `build/plugins` section:
 
 [source,xml,subs="verbatim,attributes"]
 ----
@@ -45,7 +49,7 @@ WARNING: Since version 4.0.0 of this plugin (which is the version compatible wit
 
 The `<packaging>` part is important since the plugin support several packaging types. The default is `jar`.
 
-For snapshot versions, you need the Sonatype OSSRH Snapshot repository:
+For snapshot versions, you need the Maven Central Portal Snapshot repository:
 
 [source,xml]
 ----
@@ -58,8 +62,11 @@ For snapshot versions, you need the Sonatype OSSRH Snapshot repository:
         <!-- ... -->
 
         <pluginRepository>
-            <id>ossrh</id>
-            <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+            <id>central-portal-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
             <snapshots>
                 <enabled>true</enabled>
             </snapshots>

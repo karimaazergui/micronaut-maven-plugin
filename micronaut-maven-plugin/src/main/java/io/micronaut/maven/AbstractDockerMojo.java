@@ -15,11 +15,12 @@
  */
 package io.micronaut.maven;
 
-import io.micronaut.maven.core.DockerBuildStrategy;
+import com.google.common.io.FileWriteMode;
 import io.micronaut.maven.core.MicronautRuntime;
+import io.micronaut.maven.jib.JibConfigurationService;
+import io.micronaut.maven.jib.JibMicronautExtension;
 import io.micronaut.maven.services.ApplicationConfigurationService;
 import io.micronaut.maven.services.DockerService;
-import io.micronaut.maven.jib.JibConfigurationService;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
@@ -31,9 +32,14 @@ import org.apache.maven.project.MavenProject;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static io.micronaut.maven.services.ApplicationConfigurationService.DEFAULT_PORT;
@@ -49,14 +55,13 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
 
     public static final String LATEST_TAG = "latest";
     // GlibC 2.34 is used by native image 17
-    public static final String DEFAULT_BASE_IMAGE_GRAALVM_RUN_X86 = "frolvlad/alpine-glibc:glibc-2.34";
-    public static final String DEFAULT_BASE_IMAGE_GRAALVM_RUN_ARM = "cgr.dev/chainguard/wolfi-base:latest";
+    public static final String DEFAULT_BASE_IMAGE_GRAALVM_RUN = "cgr.dev/chainguard/wolfi-base:latest";
     public static final String MOSTLY_STATIC_NATIVE_IMAGE_GRAALVM_FLAG = "-H:+StaticExecutableWithDynamicLibC";
     public static final String ARM_ARCH = "aarch64";
     public static final String X86_64_ARCH = "x64";
-    public static final String JAVA_17 = "17";
     public static final String DEFAULT_ORACLE_LINUX_VERSION = "ol9";
-    public static final String ARCH_DEFAULT_PLACEHOLDER = "ARCH_DEFAULT";
+    public static final String ORACLE_CLOUD_FUNCTION_DEFAULT_CMD = "CMD [\"io.micronaut.oraclecloud.function.http.HttpFunction::handleRequest\"]";
+    public static final String GDS_DOWNLOAD_URL = "https://gds.oracle.com/download/graal/%s/latest-gftc/graalvm-jdk-%s_linux-%s_bin.tar.gz";
 
     protected final MavenProject mavenProject;
     protected final JibConfigurationService jibConfigurationService;
@@ -103,9 +108,10 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
 
     /**
      * The Docker image used to run the native image.
+     *
      * @since 1.2
      */
-    @Parameter(property = "micronaut.native-image.base-image-run", defaultValue = ARCH_DEFAULT_PLACEHOLDER)
+    @Parameter(property = "micronaut.native-image.base-image-run", defaultValue = DEFAULT_BASE_IMAGE_GRAALVM_RUN)
     protected String baseImageRun;
 
     /**
@@ -140,18 +146,21 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
     }
 
     /**
-     * @return the GraalVM version from the <code>graalvm.version</code> property, which is expected to come from the
-     * Micronaut Parent POM.
-     */
-    protected String graalVmVersion() {
-        return mavenProject.getProperties().getProperty("graal.version");
-    }
-
-    /**
      * @return the JVM version to use for GraalVM.
      */
     protected String graalVmJvmVersion() {
-        return JAVA_17;
+        return javaVersion().getMajorVersion() == 17 ? "17" : "21";
+    }
+
+    /**
+     * @return the GraalVM download URL depending on the Java version.
+     */
+    protected String graalVmDownloadUrl() {
+        if (javaVersion().getMajorVersion() == 17) {
+            return GDS_DOWNLOAD_URL.formatted(17, 17, graalVmArch());
+        } else {
+            return GDS_DOWNLOAD_URL.formatted(21, 21, graalVmArch());
+        }
     }
 
     /**
@@ -166,8 +175,7 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
      */
     protected String getFrom() {
         if (Boolean.TRUE.equals(staticNativeImage)) {
-            // For building a static native image we need a base image with tools (cc, make,...) already installed
-            return getFromImage().orElse("ghcr.io/graalvm/graalvm-community:" + graalVmJvmVersion() + "-" + oracleLinuxVersion);
+            return getFromImage().orElse("ghcr.io/graalvm/native-image-community:" + graalVmJvmVersion() + "-muslib-" + oracleLinuxVersion);
         } else {
             return getFromImage().orElse("ghcr.io/graalvm/native-image-community:" + graalVmJvmVersion() + "-" + oracleLinuxVersion);
         }
@@ -186,21 +194,6 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
     }
 
     /**
-     * If we are building a default runtime image on arm, we need to use a different base image.
-     *
-     * @param runtime the runtime to check
-     */
-    protected void maybeUpdateBaseImageBasedOnArchitecture(MicronautRuntime runtime) {
-        if (ARCH_DEFAULT_PLACEHOLDER.equals(baseImageRun)) {
-            if (isArm() && runtime.getBuildStrategy() == DockerBuildStrategy.DEFAULT) {
-                baseImageRun = DEFAULT_BASE_IMAGE_GRAALVM_RUN_ARM;
-            } else {
-                baseImageRun = DEFAULT_BASE_IMAGE_GRAALVM_RUN_X86;
-            }
-        }
-    }
-
-    /**
      * @return the base image from the jib configuration (if any).
      */
     protected Optional<String> getFromImage() {
@@ -211,7 +204,7 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
      * @return the Docker image tags by looking at the Jib plugin configuration.
      */
     protected Set<String> getTags() {
-        Set<String> tags = new HashSet<>();
+        var tags = new HashSet<String>();
         Optional<String> toImageOptional = jibConfigurationService.getToImage();
         String imageName = mavenProject.getArtifactId();
         if (toImageOptional.isPresent()) {
@@ -233,8 +226,8 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
             tags.add(String.format("%s:%s", imageName, tag));
         }
         return tags.stream()
-                .map(this::evaluateExpression)
-                .collect(Collectors.toSet());
+            .map(this::evaluateExpression)
+            .collect(Collectors.toSet());
     }
 
     private String evaluateExpression(String expression) {
@@ -246,11 +239,13 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
     }
 
     /**
-     * @return the application port to expose by looking at the application configuration.
+     * @return the application ports to expose by looking at the Jib configuration or the application configuration.
      */
-    protected String getPort() {
-        String port = applicationConfigurationService.getServerPort();
-        return "-1".equals(port) ? DEFAULT_PORT : port;
+    protected String getPorts() {
+        return jibConfigurationService.getPorts().orElseGet(() -> {
+            String port = applicationConfigurationService.getServerPort();
+            return "-1".equals(port) ? DEFAULT_PORT : port;
+        });
     }
 
     /**
@@ -258,9 +253,9 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
      */
     @SuppressWarnings("ResultOfMethodCallIgnored")
     protected void copyDependencies() throws IOException {
-        List<String> imageClasspathScopes = Arrays.asList(Artifact.SCOPE_COMPILE, Artifact.SCOPE_RUNTIME);
+        var imageClasspathScopes = Arrays.asList(Artifact.SCOPE_COMPILE, Artifact.SCOPE_RUNTIME);
         mavenProject.setArtifactFilter(artifact -> imageClasspathScopes.contains(artifact.getScope()));
-        File target = new File(mavenProject.getBuild().getDirectory(), "dependency");
+        var target = new File(mavenProject.getBuild().getDirectory(), "dependency");
         if (!target.exists()) {
             target.mkdirs();
         }
@@ -274,10 +269,10 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
      */
     protected String getCmd() {
         return "CMD [" +
-                appArguments.stream()
-                        .map(s -> "\"" + s + "\"")
-                        .collect(Collectors.joining(", ")) +
-                "]";
+            appArguments.stream()
+                .map(s -> "\"" + s + "\"")
+                .collect(Collectors.joining(", ")) +
+            "]";
     }
 
     /**
@@ -285,6 +280,27 @@ public abstract class AbstractDockerMojo extends AbstractMicronautMojo {
      */
     protected Optional<String> getNetworkMode() {
         return Optional.ofNullable(networkMode);
+    }
+
+    /**
+     * @return the base image to use for the Dockerfile.
+     */
+    protected String getBaseImage() {
+        return JibMicronautExtension.determineBaseImage(JibMicronautExtension.getJdkVersion(mavenProject), MicronautRuntime.valueOf(micronautRuntime.toUpperCase()).getBuildStrategy());
+    }
+
+    /**
+     * Adds cmd to docker oracle cloud function file.
+     *
+     * @param dockerfile the docker file
+     */
+    protected void oracleCloudFunctionCmd(File dockerfile) throws IOException {
+        if (appArguments != null && !appArguments.isEmpty()) {
+            getLog().info("Using application arguments: " + appArguments);
+            com.google.common.io.Files.asCharSink(dockerfile, Charset.defaultCharset(), FileWriteMode.APPEND).write(System.lineSeparator() + getCmd());
+        } else {
+            com.google.common.io.Files.asCharSink(dockerfile, Charset.defaultCharset(), FileWriteMode.APPEND).write(System.lineSeparator() + ORACLE_CLOUD_FUNCTION_DEFAULT_CMD);
+        }
     }
 
 }

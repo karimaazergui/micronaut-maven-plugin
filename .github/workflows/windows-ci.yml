@@ -4,31 +4,30 @@ on:
   push:
     branches:
       - master
+      - '[1-9]+.[0-9]+.x'
   pull_request:
     branches:
       - master
+      - '[1-9]+.[0-9]+.x'
 jobs:
   build:
-    if: github.repository != 'micronaut-projects/micronaut-project-template'
     runs-on: windows-latest
     strategy:
       matrix:
-        graalvm: ['latest']
-        java: ['17']
+        java: ['17.0.12']
     steps:
       - uses: actions/checkout@v4
       - name: Cache Maven packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
-      - name: Setup GraalVM CE
-        uses: graalvm/setup-graalvm@v1
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1.3.4
         with:
-          version: ${{ matrix.graalvm }}
+          distribution: 'graalvm'
           java-version: ${{ matrix.java }}
-          components: 'native-image'
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build with Maven
         shell: cmd
@@ -36,9 +35,9 @@ jobs:
           .\mvnw install -Dinvoker.skip=true && .\mvnw verify
         env:
           TESTCONTAINERS_RYUK_DISABLED: true
-          GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
-          GRADLE_ENTERPRISE_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USERNAME }}
-          GRADLE_ENTERPRISE_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+          DEVELOCITY_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USERNAME }}
+          DEVELOCITY_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
 
 
 

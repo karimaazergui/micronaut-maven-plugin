@@ -1,0 +1,26 @@
+<develocity
+        xmlns="https://www.gradle.com/develocity-maven" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="https://www.gradle.com/develocity-maven https://www.gradle.com/schema/develocity-maven.xsd">
+    <server>
+        <url>https://ge.micronaut.io</url>
+    </server>
+    <buildScan>
+        <capture>
+            <fileFingerprints>true</fileFingerprints>
+        </capture>
+        <backgroundBuildScanUpload>#{isFalse(env['CI'])}</backgroundBuildScanUpload>
+        <publishing>
+            <onlyIf><![CDATA[authenticated]]></onlyIf>
+        </publishing>
+    </buildScan>
+    <buildCache>
+        <local>
+            <enabled>true</enabled>
+        </local>
+        <remote>
+            <!-- Use the Develocity connector's access key based authentication.-->
+            <enabled>true</enabled>
+            <storeEnabled>#{isTrue(env['CI']) and isTrue(env['DEVELOCITY_ACCESS_KEY'])}</storeEnabled>
+        </remote>
+    </buildCache>
+</develocity>

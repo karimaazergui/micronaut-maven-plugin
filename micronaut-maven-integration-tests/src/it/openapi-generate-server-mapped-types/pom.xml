@@ -19,6 +19,7 @@
     <micronaut.runtime>netty</micronaut.runtime>
     <micronaut.openapi.definition>src/openapi/spec.yaml</micronaut.openapi.definition>
     <micronaut.openapi.generate.server>true</micronaut.openapi.generate.server>
+    <maven.native.plugin.version>@native-maven-plugin.version@</maven.native.plugin.version>
   </properties>
 
   <dependencies>
@@ -164,7 +165,11 @@
               <isListWrapper>true</isListWrapper>
             </responseBodyMapping>
           </responseBodyMappings>
-
+          <additionalProperties>
+            <lombok>true</lombok>
+            <additionalEnumTypeAnnotations>@io.micronaut.aot.core.AOTModule</additionalEnumTypeAnnotations>
+            <additionalEnumTypeAnnotations>@io.test.MyAnnotation</additionalEnumTypeAnnotations>
+          </additionalProperties>
         </configuration>
       </plugin>
       <plugin>

@@ -18,10 +18,13 @@ package io.micronaut.maven.aot;
 import io.micronaut.maven.services.CompilerService;
 import io.micronaut.maven.services.DependencyResolutionService;
 import io.micronaut.maven.services.ExecutorService;
+
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.toolchain.ToolchainManager;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -39,21 +42,22 @@ public class AotSampleMojo extends AbstractMicronautAotCliMojo {
 
     @Inject
     public AotSampleMojo(CompilerService compilerService, ExecutorService executorService, MavenProject mavenProject,
-                         DependencyResolutionService dependencyResolutionService) {
-        super(compilerService, executorService, mavenProject, dependencyResolutionService);
+                         DependencyResolutionService dependencyResolutionService,
+                         MavenSession mavenSession, ToolchainManager toolchainManager) {
+        super(compilerService, executorService, mavenProject, dependencyResolutionService, mavenSession, toolchainManager);
     }
 
     @Override
     protected List<String> getExtraArgs() {
         return Arrays.asList(
-                "--config",
-                outputFile(SAMPLE_AOT_PROPERTIES_FILE_NAME).getAbsolutePath()
+            "--config",
+            outputFile(SAMPLE_AOT_PROPERTIES_FILE_NAME).getAbsolutePath()
         );
     }
 
     @Override
     protected void onSuccess(File outputDir) {
-        File sampleFile = new File(outputDir, SAMPLE_AOT_PROPERTIES_FILE_NAME);
+        var sampleFile = new File(outputDir, SAMPLE_AOT_PROPERTIES_FILE_NAME);
         if (sampleFile.exists()) {
             getLog().info("Sample configuration file written to " + sampleFile);
         }

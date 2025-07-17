@@ -21,11 +21,13 @@ import io.micronaut.maven.services.CompilerService;
 import io.micronaut.maven.services.DependencyResolutionService;
 import io.micronaut.maven.services.ExecutorService;
 import org.apache.commons.io.FileUtils;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.toolchain.ToolchainManager;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -73,13 +75,14 @@ public class AotAnalysisMojo extends AbstractMicronautAotCliMojo {
     @Inject
     @SuppressWarnings("CdiInjectionPointsInspection")
     public AotAnalysisMojo(CompilerService compilerService, ExecutorService executorService, MavenProject mavenProject,
-                           DependencyResolutionService dependencyResolutionService) {
-        super(compilerService, executorService, mavenProject, dependencyResolutionService);
+                           DependencyResolutionService dependencyResolutionService,
+                           MavenSession mavenSession, ToolchainManager toolchainManager) {
+        super(compilerService, executorService, mavenProject, dependencyResolutionService, mavenSession, toolchainManager);
     }
 
     @Override
     protected List<String> getExtraArgs() throws MojoExecutionException {
-        List<String> args = new ArrayList<>();
+        var args = new ArrayList<String>();
         args.add("--output");
         File generated = outputFile("generated");
         args.add(generated.getAbsolutePath());
@@ -91,7 +94,7 @@ public class AotAnalysisMojo extends AbstractMicronautAotCliMojo {
 
     private File writeEffectiveConfigFile() throws MojoExecutionException {
         File userProvidedFile = this.configFile == null ? new File(baseDirectory, AOT_PROPERTIES_FILE_NAME) : this.configFile;
-        Properties props = new Properties();
+        var props = new Properties();
         if (userProvidedFile.exists()) {
             try (InputStream in = Files.newInputStream(userProvidedFile.toPath())) {
                 getLog().info("Using AOT configuration file: " + configFile.getAbsolutePath());
@@ -104,7 +107,7 @@ public class AotAnalysisMojo extends AbstractMicronautAotCliMojo {
             props.put(KnownMissingTypesSourceGenerator.OPTION.key(), String.join(",", Constants.TYPES_TO_CHECK));
         }
         props.computeIfAbsent(AbstractStaticServiceLoaderSourceGenerator.SERVICE_TYPES,
-                key -> String.join(",", Constants.SERVICE_TYPES));
+            key -> String.join(",", Constants.SERVICE_TYPES));
         File effectiveConfig = outputFile("effective-" + AOT_PROPERTIES_FILE_NAME);
         try (OutputStream out = Files.newOutputStream(effectiveConfig.toPath())) {
             props.store(out, "Effective AOT configuration");

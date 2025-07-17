@@ -14,15 +14,22 @@
 
   <properties>
     <micronaut.version>@it.micronaut.version@</micronaut.version>
+    <lombok.version>1.18.38</lombok.version>
     <micronaut-maven-plugin.version>@project.version@</micronaut-maven-plugin.version>
     <packaging>jar</packaging>
     <micronaut.runtime>netty</micronaut.runtime>
     <micronaut.openapi.definition>src/openapi/petstore.json</micronaut.openapi.definition>
     <micronaut.openapi.generate.server>true</micronaut.openapi.generate.server>
     <micronaut.openapi.server.generated.annotation>false</micronaut.openapi.server.generated.annotation>
+    <maven.native.plugin.version>@native-maven-plugin.version@</maven.native.plugin.version>
   </properties>
 
   <dependencies>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>io.micronaut</groupId>
       <artifactId>micronaut-inject</artifactId>
@@ -100,6 +107,12 @@
         <groupId>io.micronaut.maven</groupId>
         <artifactId>micronaut-maven-plugin</artifactId>
         <version>${micronaut-maven-plugin.version}</version>
+        <configuration>
+          <lombok>true</lombok>
+          <typeMapping>
+            <file>StreamingFileUpload</file>
+          </typeMapping>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -108,6 +121,11 @@
           <!-- Uncomment to enable incremental compilation -->
           <!-- <useIncrementalCompilation>false</useIncrementalCompilation> -->
           <annotationProcessorPaths combine.children="append">
+            <path>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+              <version>${lombok.version}</version>
+            </path>
             <path>
               <groupId>io.micronaut</groupId>
               <artifactId>micronaut-graal</artifactId>

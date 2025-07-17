@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.micronaut.maven</groupId>
         <artifactId>micronaut-maven-plugin-parent</artifactId>
-        <version>4.3.0-SNAPSHOT</version>
+        <version>4.10.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>micronaut-maven-core</artifactId>
@@ -14,6 +14,7 @@
 
     <name>Micronaut Maven Plugin - Core</name>
     <description>Core classes for Micronaut Maven Plugin</description>
+    <url>https://github.com/micronaut-projects/micronaut-maven-plugin</url>
 
     <dependencies>
         <dependency>

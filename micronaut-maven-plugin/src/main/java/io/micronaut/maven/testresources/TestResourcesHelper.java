@@ -15,8 +15,10 @@
  */
 package io.micronaut.maven.testresources;
 
+import io.micronaut.core.io.socket.SocketUtils;
 import io.micronaut.maven.services.DependencyResolutionService;
 import io.micronaut.testresources.buildtools.MavenDependency;
+import io.micronaut.testresources.buildtools.ModuleIdentifier;
 import io.micronaut.testresources.buildtools.ServerFactory;
 import io.micronaut.testresources.buildtools.ServerSettings;
 import io.micronaut.testresources.buildtools.ServerUtils;
@@ -46,6 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static io.micronaut.maven.services.DependencyResolutionService.toClasspathFiles;
+import static io.micronaut.testresources.buildtools.ServerUtils.PROPERTIES_FILE_NAME;
 import static java.util.stream.Stream.concat;
 
 /**
@@ -94,6 +97,10 @@ public class TestResourcesHelper {
 
     private boolean debugServer;
 
+    private boolean foreground = false;
+
+    private Map<String, String> testResourcesSystemProperties;
+
     public TestResourcesHelper(boolean enabled,
                                boolean shared,
                                File buildDirectory,
@@ -108,7 +115,8 @@ public class TestResourcesHelper {
                                boolean classpathInference,
                                List<Dependency> testResourcesDependencies,
                                String sharedServerNamespace,
-                               boolean debugServer) {
+                               boolean debugServer,
+                               boolean foreground, final Map<String, String> testResourcesSystemProperties) {
         this(mavenSession, enabled, shared, buildDirectory);
         this.explicitPort = explicitPort;
         this.clientTimeout = clientTimeout;
@@ -121,6 +129,8 @@ public class TestResourcesHelper {
         this.testResourcesDependencies = testResourcesDependencies;
         this.sharedServerNamespace = sharedServerNamespace;
         this.debugServer = debugServer;
+        this.foreground = foreground;
+        this.testResourcesSystemProperties = testResourcesSystemProperties;
     }
 
     public TestResourcesHelper(MavenSession mavenSession, boolean enabled, boolean shared, File buildDirectory) {
@@ -157,11 +167,11 @@ public class TestResourcesHelper {
     }
 
     private void doStart() throws IOException {
-        String accessToken = UUID.randomUUID().toString();
+        var accessToken = UUID.randomUUID().toString();
         Path buildDir = buildDirectory.toPath();
         Path serverSettingsDirectory = getServerSettingsDirectory();
-        AtomicBoolean serverStarted = new AtomicBoolean(false);
-        ServerFactory serverFactory = new DefaultServerFactory(log, toolchainManager, mavenSession, serverStarted, testResourcesVersion, debugServer);
+        var serverStarted = new AtomicBoolean(false);
+        var serverFactory = new DefaultServerFactory(log, toolchainManager, mavenSession, serverStarted, testResourcesVersion, debugServer, foreground, testResourcesSystemProperties);
         Optional<ServerSettings> optionalServerSettings = startOrConnectToExistingServer(accessToken, buildDir, serverSettingsDirectory, serverFactory);
         if (optionalServerSettings.isPresent()) {
             ServerSettings serverSettings = optionalServerSettings.get();
@@ -175,6 +185,7 @@ public class TestResourcesHelper {
                     Path source = serverSettingsDirectory.resolve(TEST_RESOURCES_PROPERTIES);
                     Path target = projectSettingsDirectory.resolve(TEST_RESOURCES_PROPERTIES);
                     Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+
                 } else {
                     log.info("Test Resources is configured in shared mode");
                 }
@@ -212,7 +223,7 @@ public class TestResourcesHelper {
      * @return The system properties
      */
     public Map<String, String> computeSystemProperties(ServerSettings serverSettings) {
-        Map<String, String> systemProperties = new HashMap<>(3);
+        var systemProperties = new HashMap<String, String>(3);
         String uri = String.format("http://localhost:%d", serverSettings.getPort());
         systemProperties.put(TEST_RESOURCES_PROP_SERVER_URI, uri);
         serverSettings.getAccessToken().ifPresent(accessToken -> systemProperties.put(TEST_RESOURCES_PROP_ACCESS_TOKEN, accessToken));
@@ -227,16 +238,16 @@ public class TestResourcesHelper {
     private Optional<ServerSettings> startOrConnectToExistingServer(String accessToken, Path buildDir, Path serverSettingsDirectory, ServerFactory serverFactory) {
         try {
             return Optional.ofNullable(
-                    ServerUtils.startOrConnectToExistingServer(
-                        explicitPort,
-                        buildDir.resolve(PORT_FILE_NAME),
-                        serverSettingsDirectory,
-                        accessToken,
-                        resolveServerClasspath(),
-                        clientTimeout,
-                        serverIdleTimeoutMinutes,
-                        serverFactory
-                    )
+                ServerUtils.startOrConnectToExistingServer(
+                    explicitPort,
+                    buildDir.resolve(PORT_FILE_NAME),
+                    serverSettingsDirectory,
+                    accessToken,
+                    resolveServerClasspath(),
+                    clientTimeout,
+                    serverIdleTimeoutMinutes,
+                    serverFactory
+                )
             );
         } catch (Exception e) {
             log.error("Error starting Micronaut Test Resources service", e);
@@ -250,48 +261,83 @@ public class TestResourcesHelper {
             applicationDependencies = getApplicationDependencies();
         }
         Stream<Artifact> serverDependencies =
-                TestResourcesClasspath.inferTestResourcesClasspath(applicationDependencies, testResourcesVersion)
-                        .stream()
-                        .map(DependencyResolutionService::testResourcesDependencyToAetherArtifact);
+            TestResourcesClasspath.inferTestResourcesClasspath(applicationDependencies, testResourcesVersion)
+                .stream()
+                .map(DependencyResolutionService::testResourcesDependencyToAetherArtifact);
 
         List<org.apache.maven.model.Dependency> extraDependencies =
-                testResourcesDependencies != null ? testResourcesDependencies : Collections.emptyList();
+            testResourcesDependencies != null ? testResourcesDependencies : Collections.emptyList();
 
         Stream<Artifact> extraDependenciesStream = extraDependencies.stream()
-                .map(DependencyResolutionService::mavenDependencyToAetherArtifact);
+            .map(DependencyResolutionService::mavenDependencyToAetherArtifact);
 
         Stream<Artifact> artifacts = concat(serverDependencies, extraDependenciesStream);
 
-        return toClasspathFiles(dependencyResolutionService.artifactResultsFor(artifacts, true));
+        var resolutionResult = dependencyResolutionService.artifactResultsFor(artifacts, true);
+        var filteredArtifacts = resolutionResult.stream()
+            .filter(result -> {
+                var artifact = result.getArtifact();
+                var id = new ModuleIdentifier(artifact.getGroupId(), artifact.getArtifactId());
+                return TestResourcesClasspath.isDependencyAllowedOnServerClasspath(id);
+            })
+            .toList();
+        return toClasspathFiles(filteredArtifacts);
     }
 
     private List<MavenDependency> getApplicationDependencies() {
         return this.mavenProject.getDependencies().stream()
-                .map(DependencyResolutionService::mavenDependencyToTestResourcesDependency)
-                .toList();
+            .map(DependencyResolutionService::mavenDependencyToTestResourcesDependency)
+            .toList();
     }
 
     /**
      * Contains the logic to stop the Test Resources Service.
+     *
+     * @param quiet Whether to perform logging or not.
      */
-    public void stop() throws MojoExecutionException {
+    public void stop(boolean quiet) throws MojoExecutionException {
         if (!enabled) {
             return;
         }
         if (isKeepAlive()) {
-            log.info("Keeping Micronaut Test Resources service alive");
+            log("Keeping Micronaut Test Resources service alive", quiet);
             return;
         }
         try {
             Optional<ServerSettings> optionalServerSettings = ServerUtils.readServerSettings(getServerSettingsDirectory());
-            if (optionalServerSettings.isPresent() && ServerUtils.isServerStarted(optionalServerSettings.get().getPort())) {
-                log.info("Shutting down Micronaut Test Resources service");
-                doStop();
-            } else {
-                log.info("Cannot find Micronaut Test Resources service settings, server may already be shutdown.");
+            if (optionalServerSettings.isPresent()) {
+                if (isServerStarted(optionalServerSettings.get().getPort())) {
+                    log("Shutting down Micronaut Test Resources service", quiet);
+                    doStop();
+                } else {
+                    log("Cannot find Micronaut Test Resources service settings, server may already be shutdown", quiet);
+                    Files.deleteIfExists(getServerSettingsDirectory().resolve(PROPERTIES_FILE_NAME));
+                }
+                if (shared && sharedServerNamespace != null) {
+                    Path projectSettingsDirectory = serverSettingsDirectoryOf(buildDirectory.toPath());
+                    Files.deleteIfExists(projectSettingsDirectory.resolve(TEST_RESOURCES_PROPERTIES));
+                }
             }
         } catch (Exception e) {
             throw new MojoExecutionException("Unable to stop test resources server", e);
+        }
+    }
+
+    private static boolean isServerStarted(int port) {
+        if (System.getProperty("test.resources.internal.server.started") != null) {
+            return Boolean.getBoolean("test.resources.internal.server.started");
+        } else {
+            return !SocketUtils.isTcpPortAvailable(port);
+        }
+    }
+
+    private void log(String message, boolean quiet) {
+        if (quiet) {
+            if (log.isDebugEnabled()) {
+                log.debug(message);
+            }
+        } else {
+            log.info(message);
         }
     }
 
@@ -322,7 +368,7 @@ public class TestResourcesHelper {
     }
 
     private Path getKeepAliveFile() {
-        Path tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
         return tmpDir.resolve("keepalive-" + mavenSession.getRequest().getBuilderId());
     }
 

@@ -28,7 +28,7 @@ import org.apache.maven.project.MavenProject;
 import java.io.File;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * Base class for OpenAPI generator mojos. This provides the common
@@ -71,6 +71,12 @@ public abstract class AbstractOpenApiMojo extends AbstractMicronautMojo {
     protected boolean useBeanValidation;
 
     /**
+     * Flag to indicate whether to use the utils.OneOfImplementorAdditionalData related logic.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".use.one.of.interfaces", defaultValue = "true", required = true)
+    protected boolean useOneOfInterfaces;
+
+    /**
      * Whether to use {@link java.util.Optional} for non-required model properties and API parameters.
      */
     @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".use.optional", defaultValue = "false", required = true)
@@ -81,6 +87,36 @@ public abstract class AbstractOpenApiMojo extends AbstractMicronautMojo {
      */
     @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".use.reactive", defaultValue = "true", required = true)
     protected boolean useReactive;
+
+    /**
+     * Configure the serialization library.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".serialization.framework", defaultValue = "MICRONAUT_SERDE_JACKSON", required = true)
+    protected String serializationFramework;
+
+    /**
+     * If true, the generated operation return types will be wrapped in HttpResponse.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".always.use.generate.http.response", defaultValue = "false", required = true)
+    protected boolean alwaysUseGenerateHttpResponse;
+
+    /**
+     * Wrap the operations response in HttpResponse object where non-200 HTTP status codes or additional headers are defined.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".generate.http.response.where.required", defaultValue = "true", required = true)
+    protected boolean generateHttpResponseWhereRequired;
+
+    /**
+     * If set to true, generated code will be fully compatible with KSP, but not 100% with KAPT.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".ksp", defaultValue = "false", required = true)
+    protected boolean ksp;
+
+    /**
+     * Configure the date-time format.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".date.time.format", defaultValue = "ZONED_DATETIME", required = true)
+    protected String dateTimeFormat;
 
     /**
      * Comma-separated values of output kinds to generate. The values are defined by the
@@ -110,17 +146,248 @@ public abstract class AbstractOpenApiMojo extends AbstractMicronautMojo {
     protected List<ResponseBodyMapping> responseBodyMappings;
 
     /**
+     * Add the schema mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".schemaMapping")
+    protected Map<String, String> schemaMapping;
+
+    /**
+     * Add the import mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".importMapping")
+    protected Map<String, String> importMapping;
+
+    /**
+     * Add the name mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".nameMapping")
+    protected Map<String, String> nameMapping;
+
+    /**
+     * Add the type mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".typeMapping")
+    protected Map<String, String> typeMapping;
+
+    /**
+     * Add the enum name mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".enumNameMapping")
+    protected Map<String, String> enumNameMapping;
+
+    /**
+     * Add the model name mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".modelNameMapping")
+    protected Map<String, String> modelNameMapping;
+
+    /**
+     * Add the inline schema name mappings.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".inlineSchemaNameMapping")
+    protected Map<String, String> inlineSchemaNameMapping;
+
+    /**
+     * Add the inline schema options.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".inlineSchemaOption")
+    protected Map<String, String> inlineSchemaOption;
+
+    /**
+     * Add the OpenAPI normalizer options.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".openapiNormalizer")
+    protected Map<String, String> openapiNormalizer;
+
+    /**
+     * Set the api name prefix.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".apiNamePrefix")
+    protected String apiNamePrefix;
+
+    /**
+     * Set the api name suffix.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".apiNameSuffix")
+    protected String apiNameSuffix;
+
+    /**
+     * Set the model name prefix.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".modelNamePrefix")
+    protected String modelNamePrefix;
+
+    /**
+     * Set the model name suffix.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".modelNameSuffix")
+    protected String modelNameSuffix;
+
+    /**
      * Allows specifying the language of the generated code.
+     *
      * @since 4.3.0
      */
     @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".lang", defaultValue = "java")
     protected String lang;
 
+    /**
+     * If set to true, the generated enums check enum value with ignoring case.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".useEnumCaseInsensitive", defaultValue = "false")
+    protected boolean useEnumCaseInsensitive;
+
+    /**
+     * Additional annotations for enum type (class level annotations).
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".additionalEnumTypeAnnotations")
+    protected List<String> additionalEnumTypeAnnotations;
+
+    /**
+     * Additional annotations for model type (class level annotations).
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".additionalModelTypeAnnotations")
+    protected List<String> additionalModelTypeAnnotations;
+
+    /**
+     * Additional annotations for oneOf interfaces (class level annotations).
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".additionalOneOfTypeAnnotations")
+    protected List<String> additionalOneOfTypeAnnotations;
+
+    /**
+     * Additional generator properties.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".additionalProperties")
+    protected Map<String, Object> additionalProperties;
+
+    /**
+     * If set to true, controller and client method will be generated with openAPI annotations.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".generateSwaggerAnnotations", defaultValue = "false")
+    protected boolean generateSwaggerAnnotations;
+
+    /**
+     * Set the implicit headers flag.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".implicitHeaders", defaultValue = "false")
+    protected boolean implicitHeaders;
+
+    /**
+     * Set the implicit headers regex.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".implicitHeadersRegex")
+    protected String implicitHeadersRegex;
+
+    /**
+     * Flag to indicate whether to use the "jakarta" or "javax" package.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".useJakartaEe", defaultValue = "true")
+    protected boolean useJakartaEe = true;
+
+    /**
+     * Sort method arguments to place required parameters before optional parameters.
+     * Default: true
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".sortParamsByRequiredFlag", defaultValue = "true")
+    protected boolean sortParamsByRequiredFlag = true;
+
+    /**
+     * Skip examples defined in operations to avoid out of memory errors.
+     * Default: false
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".skipOperationExample")
+    protected boolean skipOperationExample;
+
+    /**
+     * Skip sorting operations.
+     * Default: false
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".skipSortingOperations")
+    protected boolean skipSortingOperations;
+
+    /**
+     * Character to use as a delimiter for the prefix. Default: '_'
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".removeOperationIdPrefixDelimiter", defaultValue = "_")
+    protected String removeOperationIdPrefixDelimiter = "_";
+
+    /**
+     * Count of delimiter for the prefix. Use -1 for last. Default: 1
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".removeOperationIdPrefixCount", defaultValue = "1")
+    protected int removeOperationIdPrefixCount = 1;
+
+    /**
+     * Sort model properties to place required parameters before optional parameters.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".sortModelPropertiesByRequiredFlag", defaultValue = "true")
+    protected boolean sortModelPropertiesByRequiredFlag = true;
+
+    /**
+     * Whether to ensure parameter names are unique in an operation (rename parameters that are not).
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".ensureUniqueParams", defaultValue = "true")
+    protected boolean ensureUniqueParams = true;
+
+    /**
+     * boolean, toggles whether Unicode identifiers are allowed in names or not, default is false.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".allowUnicodeIdentifiers")
+    protected boolean allowUnicodeIdentifiers;
+
+    /**
+     * Add form or body parameters to the beginning of the parameter list.
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".prependFormOrBodyParameters")
+    protected boolean prependFormOrBodyParameters;
+
+    /**
+     * If set to true, generated code will be with suspend methods. Ony for kotlin generator.
+     *
+     * @since 4.8.0
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".coroutines")
+    protected boolean coroutines;
+
+    /**
+     * Whether to generate sealed model interfaces and classes. Only for java generator.
+     *
+     * @since 4.8.0
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".useSealed")
+    protected boolean useSealed;
+
+    /**
+     * If set to true, {@literal @}JsonInclude annotation will be with value ALWAYS for required properties in POJO's.
+     *
+     * @since 4.8.0
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".jsonIncludeAlwaysForRequiredFields")
+    protected boolean jsonIncludeAlwaysForRequiredFields;
+
+    /**
+     * Generate or not required properties constructor. Only for java generator.
+     *
+     * @since 4.8.0
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".requiredPropertiesInConstructor", defaultValue = "true")
+    protected boolean requiredPropertiesInConstructor = true;
+
+    /**
+     * If true, the generated controller interface will be without `@Controller` annotation.
+     *
+     * @since 4.8.0
+     */
+    @Parameter(property = MICRONAUT_OPENAPI_PREFIX + ".generateControllerAsAbstract")
+    protected boolean generateControllerAsAbstract;
+
     @Parameter(defaultValue = "${project}", readonly = true)
-    private MavenProject project;
+    protected MavenProject project;
 
     /**
      * Determines if this mojo must be executed.
+     *
      * @return true if the mojo is enabled
      */
     protected abstract boolean isEnabled();
@@ -130,6 +397,7 @@ public abstract class AbstractOpenApiMojo extends AbstractMicronautMojo {
      * common properties shared by all generators have already been
      * configured, so this method should only take care of configuring
      * the generator specific parameters.
+     *
      * @param builder the generator configuration builder
      */
     protected abstract void configureBuilder(MicronautCodeGeneratorBuilder builder) throws MojoExecutionException;
@@ -140,44 +408,86 @@ public abstract class AbstractOpenApiMojo extends AbstractMicronautMojo {
             getLog().debug(this.getClass().getSimpleName() + " is disabled");
             return;
         }
+
         project.addCompileSourceRoot(outputDirectory.getAbsolutePath());
         var builder = MicronautCodeGeneratorEntryPoint.builder()
-                .withDefinitionFile(definitionFile.toURI())
-                .withOutputDirectory(outputDirectory)
-                .withOutputs(
-                        outputKinds.stream().map(String::toUpperCase).map(MicronautCodeGeneratorEntryPoint.OutputKind::valueOf).toList().toArray(new MicronautCodeGeneratorEntryPoint.OutputKind[0])
+            .withDefinitionFile(definitionFile.toURI())
+            .withOutputDirectory(outputDirectory)
+            .withOutputs(
+                outputKinds.stream().map(String::toUpperCase).map(MicronautCodeGeneratorEntryPoint.OutputKind::valueOf).toList().toArray(new MicronautCodeGeneratorEntryPoint.OutputKind[0])
+            )
+            .withOptions(options -> options
+                .withLang(MicronautCodeGeneratorOptionsBuilder.GeneratorLanguage.valueOf(lang.toUpperCase(Locale.ENGLISH)))
+                .withApiPackage(apiPackageName)
+                .withModelPackage(modelPackageName)
+                .withInvokerPackage(invokerPackageName)
+                .withBeanValidation(useBeanValidation)
+                .withUseOneOfInterfaces(useOneOfInterfaces)
+                .withOptional(useOptional)
+                .withReactive(useReactive)
+                .withSerializationLibrary(SerializationLibraryKind.valueOf(serializationFramework.toUpperCase(Locale.ENGLISH)))
+                .withGenerateHttpResponseAlways(alwaysUseGenerateHttpResponse)
+                .withGenerateHttpResponseWhereRequired(generateHttpResponseWhereRequired)
+                .withDateTimeFormat(MicronautCodeGeneratorOptionsBuilder.DateTimeFormat.valueOf(dateTimeFormat.toUpperCase(Locale.ENGLISH)))
+                .withParameterMappings(parameterMappings.stream()
+                    .map(mapping -> new io.micronaut.openapi.generator.ParameterMapping(
+                        mapping.getName(),
+                        io.micronaut.openapi.generator.ParameterMapping.ParameterLocation.valueOf(
+                            mapping.getLocation().name()
+                        ),
+                        mapping.getMappedType(),
+                        mapping.getMappedName(),
+                        mapping.isValidated()
+                    ))
+                    .toList()
                 )
-                .withOptions(options -> {
-                    options.withLang(MicronautCodeGeneratorOptionsBuilder.GeneratorLanguage.valueOf(lang.toUpperCase(Locale.ENGLISH)));
-                    options.withInvokerPackage(invokerPackageName);
-                    options.withApiPackage(apiPackageName);
-                    options.withModelPackage(modelPackageName);
-                    options.withBeanValidation(useBeanValidation);
-                    options.withOptional(useOptional);
-                    options.withReactive(useReactive);
-                    options.withSerializationLibrary(SerializationLibraryKind.MICRONAUT_SERDE_JACKSON);
-                    options.withParameterMappings(parameterMappings.stream()
-                            .map(mapping -> new io.micronaut.openapi.generator.ParameterMapping(
-                                    mapping.getName(),
-                                    io.micronaut.openapi.generator.ParameterMapping.ParameterLocation.valueOf(
-                                            mapping.getLocation().name()
-                                    ),
-                                    mapping.getMappedType(),
-                                    mapping.getMappedName(),
-                                    mapping.isValidated()
-                            ))
-                            .collect(Collectors.toList())
-                    );
-                    options.withResponseBodyMappings(responseBodyMappings.stream()
-                            .map(mapping -> new io.micronaut.openapi.generator.ResponseBodyMapping(
-                                    mapping.getHeaderName(),
-                                    mapping.getMappedBodyType(),
-                                    mapping.isListWrapper(),
-                                    mapping.isValidated()
-                            ))
-                            .collect(Collectors.toList())
-                    );
-                });
+                .withResponseBodyMappings(responseBodyMappings.stream()
+                    .map(mapping -> new io.micronaut.openapi.generator.ResponseBodyMapping(
+                        mapping.getHeaderName(),
+                        mapping.getMappedBodyType(),
+                        mapping.isListWrapper(),
+                        mapping.isValidated()
+                    ))
+                    .toList()
+                )
+                .withSchemaMapping(schemaMapping)
+                .withImportMapping(importMapping)
+                .withNameMapping(nameMapping)
+                .withTypeMapping(typeMapping)
+                .withEnumNameMapping(enumNameMapping)
+                .withModelNameMapping(modelNameMapping)
+                .withInlineSchemaNameMapping(inlineSchemaNameMapping)
+                .withInlineSchemaOption(inlineSchemaOption)
+                .withOpenapiNormalizer(openapiNormalizer)
+                .withApiNamePrefix(apiNamePrefix != null ? apiNamePrefix : "")
+                .withApiNameSuffix(apiNameSuffix != null ? apiNameSuffix : "")
+                .withModelNamePrefix(modelNamePrefix != null ? modelNamePrefix : "")
+                .withModelNameSuffix(modelNameSuffix != null ? modelNameSuffix : "")
+                .withGenerateSwaggerAnnotations(generateSwaggerAnnotations)
+                .withImplicitHeaders(implicitHeaders)
+                .withImplicitHeadersRegex(implicitHeadersRegex != null ? implicitHeadersRegex : "")
+                .withUseEnumCaseInsensitive(useEnumCaseInsensitive)
+                .withAdditionalEnumTypeAnnotations(additionalEnumTypeAnnotations)
+                .withAdditionalModelTypeAnnotations(additionalModelTypeAnnotations)
+                .withAdditionalOneOfTypeAnnotations(additionalOneOfTypeAnnotations)
+                .withAdditionalProperties(additionalProperties)
+
+                .withUseJakartaEe(useJakartaEe)
+                .withSortParamsByRequiredFlag(sortParamsByRequiredFlag)
+                .withSkipOperationExample(skipOperationExample)
+                .withSkipSortingOperations(skipSortingOperations)
+                .withRemoveOperationIdPrefixDelimiter(removeOperationIdPrefixDelimiter)
+                .withRemoveOperationIdPrefixCount(removeOperationIdPrefixCount)
+                .withSortModelPropertiesByRequiredFlag(sortModelPropertiesByRequiredFlag)
+                .withEnsureUniqueParams(ensureUniqueParams)
+                .withAllowUnicodeIdentifiers(allowUnicodeIdentifiers)
+                .withPrependFormOrBodyParameters(prependFormOrBodyParameters)
+
+                .withUseSealed(useSealed)
+                .withJsonIncludeAlwaysForRequiredFields(jsonIncludeAlwaysForRequiredFields)
+                .withRequiredPropertiesInConstructor(requiredPropertiesInConstructor)
+                .withGenerateControllerAsAbstract(generateControllerAsAbstract)
+            );
         configureBuilder(builder);
         builder.build().generate();
     }

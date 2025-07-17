@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.micronaut.maven</groupId>
         <artifactId>micronaut-maven-plugin-parent</artifactId>
-        <version>4.3.0-SNAPSHOT</version>
+        <version>4.10.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>micronaut-maven-jib-integration</artifactId>
@@ -14,6 +14,7 @@
 
     <name>Micronaut Maven Plugin - Jib Integration</name>
     <description>Integration with the Jib Maven Plugin</description>
+    <url>https://github.com/micronaut-projects/micronaut-maven-plugin</url>
 
     <dependencies>
         <!-- Internal dependencies -->
@@ -27,7 +28,7 @@
         <dependency>
             <groupId>com.google.cloud.tools</groupId>
             <artifactId>jib-maven-plugin</artifactId>
-            <version>3.4.0</version>
+            <version>${jib-maven-plugin.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.cloud.tools</groupId>
@@ -42,12 +43,25 @@
         <dependency>
             <groupId>com.google.cloud.tools</groupId>
             <artifactId>jib-core</artifactId>
-            <version>0.25.0</version>
+            <version>0.27.3</version>
         </dependency>
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-xml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk8</artifactId>
         </dependency>
 
         <!-- JUnit -->
@@ -59,6 +73,22 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit-pioneer</groupId>
+            <artifactId>junit-pioneer</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.5.18</version>
             <scope>test</scope>
         </dependency>
 

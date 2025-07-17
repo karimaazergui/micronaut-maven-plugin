@@ -13,10 +13,8 @@
   </parent>
 
   <properties>
-    <jdk.version>17</jdk.version>
-    <release.version>17</release.version>
-    <micronaut.version>4.0.0-M1</micronaut.version>
-    <micronaut-maven-plugin.version>4.0.0-SNAPSHOT</micronaut-maven-plugin.version>
+    <micronaut.version>4.6.2</micronaut.version>
+    <micronaut-maven-plugin.version>4.6.3</micronaut-maven-plugin.version>
     <exec.mainClass>io.micronaut.maven.examples.Application</exec.mainClass>
     <packaging>jar</packaging>
     <micronaut.runtime>netty</micronaut.runtime>
@@ -32,14 +30,15 @@
       <url>https://repo.maven.apache.org/maven2</url>
     </repository>
     <repository>
-      <id>sonatype-snapshots</id>
-      <url>https://s01.oss.sonatype.org/content/repositories/snapshots/</url>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
+      <name>Central Portal Snapshots</name>
+      <id>central-portal-snapshots</id>
+      <url>https://central.sonatype.com/repository/maven-snapshots/</url>
       <releases>
         <enabled>false</enabled>
       </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
     </repository>
   </repositories>
 

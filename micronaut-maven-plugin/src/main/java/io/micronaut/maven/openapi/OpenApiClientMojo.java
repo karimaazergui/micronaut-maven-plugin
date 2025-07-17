@@ -28,14 +28,22 @@ import java.util.List;
  */
 @Mojo(name = OpenApiClientMojo.MOJO_NAME, defaultPhase = LifecyclePhase.GENERATE_SOURCES)
 public class OpenApiClientMojo extends AbstractOpenApiMojo {
+
     public static final String MOJO_NAME = "generate-openapi-client";
+
     private static final String CLIENT_PREFIX = MICRONAUT_OPENAPI_PREFIX + ".client.";
 
     /**
      * Client id.
      */
-    @Parameter(property = CLIENT_PREFIX  + "id", defaultValue = "")
+    @Parameter(property = CLIENT_PREFIX + "id")
     protected String clientId;
+
+    /**
+     * If set to true, Api annotation {@literal @}Client will be with `path` attribute.
+     */
+    @Parameter(property = CLIENT_PREFIX + "path")
+    protected boolean clientPath;
 
     /**
      * Whether to configure authentication for client.
@@ -69,6 +77,7 @@ public class OpenApiClientMojo extends AbstractOpenApiMojo {
 
     /**
      * Determines if the client should use lombok.
+     *
      * @since 4.2.2
      */
     @Parameter(property = CLIENT_PREFIX + "lombok")
@@ -76,6 +85,7 @@ public class OpenApiClientMojo extends AbstractOpenApiMojo {
 
     /**
      * Determines if the client should use flux for arrays.
+     *
      * @since 4.2.2
      */
     @Parameter(property = CLIENT_PREFIX + "flux.for.arrays")
@@ -83,6 +93,7 @@ public class OpenApiClientMojo extends AbstractOpenApiMojo {
 
     /**
      * If set to true, the `javax.annotation.Generated` annotation will be added to all generated classes.
+     *
      * @since 4.2.2
      */
     @Parameter(property = CLIENT_PREFIX + "generated.annotation", defaultValue = "true")
@@ -95,28 +106,15 @@ public class OpenApiClientMojo extends AbstractOpenApiMojo {
 
     @Override
     protected void configureBuilder(MicronautCodeGeneratorBuilder builder) {
-        if ("java".equalsIgnoreCase(lang)) {
-            builder.forJavaClient(spec -> {
-                spec.withAuthorization(useAuth);
-                if (clientId != null && !clientId.isEmpty()) {
-                    spec.withClientId(clientId);
-                }
-                if (additionalTypeAnnotations != null) {
-                    spec.withAdditionalClientTypeAnnotations(additionalTypeAnnotations);
-                }
-                if (basePathSeparator != null) {
-                    spec.withBasePathSeparator(basePathSeparator);
-                }
-                if (authorizationFilterPattern != null) {
-                    spec.withAuthorizationFilterPattern(authorizationFilterPattern);
-                }
-                spec.withLombok(lombok);
-                spec.withFluxForArrays(fluxForArrays);
-                spec.withGeneratedAnnotation(generatedAnnotation);
-            });
-        } else if ("kotlin".equalsIgnoreCase(lang)) {
+        if ("kotlin".equalsIgnoreCase(lang)) {
             builder.forKotlinClient(spec -> {
-                spec.withAuthorization(useAuth);
+                spec.withAuthorization(useAuth)
+                    .withGeneratedAnnotation(generatedAnnotation)
+                    .withFluxForArrays(fluxForArrays)
+                    .withKsp(ksp)
+                    .withClientPath(clientPath)
+                    .withCoroutines(coroutines);
+
                 if (clientId != null && !clientId.isEmpty()) {
                     spec.withClientId(clientId);
                 }
@@ -129,8 +127,27 @@ public class OpenApiClientMojo extends AbstractOpenApiMojo {
                 if (authorizationFilterPattern != null) {
                     spec.withAuthorizationFilterPattern(authorizationFilterPattern);
                 }
-                spec.withFluxForArrays(fluxForArrays);
-                spec.withGeneratedAnnotation(generatedAnnotation);
+            });
+        } else if ("java".equalsIgnoreCase(lang)) {
+            builder.forJavaClient(spec -> {
+                spec.withAuthorization(useAuth)
+                    .withLombok(lombok)
+                    .withGeneratedAnnotation(generatedAnnotation)
+                    .withFluxForArrays(fluxForArrays)
+                    .withClientPath(clientPath);
+
+                if (clientId != null && !clientId.isEmpty()) {
+                    spec.withClientId(clientId);
+                }
+                if (additionalTypeAnnotations != null) {
+                    spec.withAdditionalClientTypeAnnotations(additionalTypeAnnotations);
+                }
+                if (basePathSeparator != null) {
+                    spec.withBasePathSeparator(basePathSeparator);
+                }
+                if (authorizationFilterPattern != null) {
+                    spec.withAuthorizationFilterPattern(authorizationFilterPattern);
+                }
             });
         } else {
             throw new UnsupportedOperationException("Unsupported language:" + lang);

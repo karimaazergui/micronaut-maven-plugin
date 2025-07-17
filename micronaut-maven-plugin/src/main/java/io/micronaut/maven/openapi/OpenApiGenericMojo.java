@@ -35,6 +35,7 @@ import java.util.Map;
  */
 @Mojo(name = OpenApiGenericMojo.MOJO_NAME, defaultPhase = LifecyclePhase.GENERATE_SOURCES)
 public class OpenApiGenericMojo extends AbstractOpenApiMojo {
+
     public static final String MOJO_NAME = "generate-openapi-generic";
     public static final String CONFIGURATION_PROPERTIES = MICRONAUT_OPENAPI_PREFIX + ".generator.properties";
 
@@ -83,10 +84,10 @@ public class OpenApiGenericMojo extends AbstractOpenApiMojo {
         MicronautCodeGenerator<? extends GeneratorOptionsBuilder> generator;
         try {
             generator = (MicronautCodeGenerator<? extends GeneratorOptionsBuilder>) this.getClass()
-                    .getClassLoader()
-                    .loadClass(generatorClassName)
-                    .getDeclaredConstructor()
-                    .newInstance();
+                .getClassLoader()
+                .loadClass(generatorClassName)
+                .getDeclaredConstructor()
+                .newInstance();
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -118,14 +119,14 @@ public class OpenApiGenericMojo extends AbstractOpenApiMojo {
                 method.invoke(builder, value);
                 return true;
             } else if (parameterType.equals(Boolean.TYPE)) {
-                var coerced = value.toLowerCase(Locale.US);
+                var coerced = value.toLowerCase(Locale.ENGLISH);
                 if ("true".equals(coerced) || "false".equals(coerced)) {
                     method.invoke(builder, Boolean.parseBoolean(coerced));
                     return true;
                 }
             } else if (parameterType.equals(Integer.TYPE) && (value.matches("[0-9]+"))) {
-                    method.invoke(builder, Integer.parseInt(value));
-                    return true;
+                method.invoke(builder, Integer.parseInt(value));
+                return true;
 
             }
         }
@@ -136,6 +137,7 @@ public class OpenApiGenericMojo extends AbstractOpenApiMojo {
      * Exception to be thrown when OpenAPI generator configuration fails.
      */
     static class OpenAPIInvocationException extends RuntimeException {
+
         public OpenAPIInvocationException(String message) {
             super(message);
         }

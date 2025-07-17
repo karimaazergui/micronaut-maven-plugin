@@ -19,12 +19,11 @@ import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.exception.DockerClientException;
 import com.google.cloud.tools.jib.api.ImageReference;
 import com.google.cloud.tools.jib.api.InvalidImageReferenceException;
-import com.google.common.io.FileWriteMode;
+import io.micronaut.core.util.StringUtils;
 import io.micronaut.maven.core.MicronautRuntime;
+import io.micronaut.maven.jib.JibConfigurationService;
 import io.micronaut.maven.services.ApplicationConfigurationService;
 import io.micronaut.maven.services.DockerService;
-import io.micronaut.maven.jib.JibConfigurationService;
-import io.micronaut.core.util.StringUtils;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -36,7 +35,6 @@ import org.graalvm.buildtools.utils.NativeImageUtils;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -63,6 +61,9 @@ public class DockerNativeMojo extends AbstractDockerMojo {
     public static final String MICRONAUT_PARENT = "io.micronaut.platform:micronaut-parent";
     public static final String MICRONAUT_VERSION = "micronaut.version";
     public static final String ARGS_FILE_PROPERTY_NAME = "graalvm.native-image.args-file";
+    static final int AWS_LAMBDA_MAX_ALLOWED_VERSION = 21;
+    static final int ORACLE_FUNCTION_MAX_ALLOWED_VERSION = 21;
+    static final int MAX_ALLOWED_VERSION = 21;
     private MicronautRuntime runtime;
 
     @SuppressWarnings("CdiInjectionPointsInspection")
@@ -75,7 +76,6 @@ public class DockerNativeMojo extends AbstractDockerMojo {
 
     @Override
     public void execute() throws MojoExecutionException {
-        checkJavaVersion();
         checkGraalVm();
 
         try {
@@ -84,19 +84,28 @@ public class DockerNativeMojo extends AbstractDockerMojo {
             this.runtime = MicronautRuntime.valueOf(micronautRuntime.toUpperCase());
 
             switch (runtime.getBuildStrategy()) {
-                case LAMBDA -> buildDockerNativeLambda();
-                case ORACLE_FUNCTION -> buildOracleCloud();
-                case DEFAULT -> buildDockerNative();
+                case LAMBDA -> {
+                    checkJavaVersion(AWS_LAMBDA_MAX_ALLOWED_VERSION);
+                    buildDockerNativeLambda();
+                }
+                case ORACLE_FUNCTION -> {
+                    checkJavaVersion(ORACLE_FUNCTION_MAX_ALLOWED_VERSION);
+                    buildOracleCloud();
+                }
+                case DEFAULT -> {
+                    checkJavaVersion(MAX_ALLOWED_VERSION);
+                    buildDockerNative();
+                }
                 default -> throw new IllegalStateException("Unexpected value: " + runtime.getBuildStrategy());
             }
 
 
         } catch (InvalidImageReferenceException iire) {
             String message = "Invalid image reference "
-                    + iire.getInvalidReference()
-                    + ", perhaps you should check that the reference is formatted correctly according to " +
-                    "https://docs.docker.com/engine/reference/commandline/tag/#extended-description" +
-                    "\nFor example, slash-separated name components cannot have uppercase letters";
+                + iire.getInvalidReference()
+                + ", perhaps you should check that the reference is formatted correctly according to " +
+                "https://docs.docker.com/engine/reference/commandline/tag/#extended-description" +
+                "\nFor example, slash-separated name components cannot have uppercase letters";
             throw new MojoExecutionException(message);
         } catch (IOException | IllegalArgumentException e) {
             throw new MojoExecutionException(e.getMessage(), e);
@@ -130,28 +139,22 @@ public class DockerNativeMojo extends AbstractDockerMojo {
         }
     }
 
-    private void checkJavaVersion() throws MojoExecutionException {
-        if (javaVersion().getMajorVersion() > 17) {
-            throw new MojoExecutionException("To build native images you must set the Java target byte code level to Java 17 or below");
+    private void checkJavaVersion(int maxAllowedVersion) throws MojoExecutionException {
+        if (javaVersion().getMajorVersion() > maxAllowedVersion) {
+            throw new MojoExecutionException("To build native images you must set the Java target byte code level to Java %s or below".formatted(maxAllowedVersion));
         }
     }
 
     private void buildDockerNativeLambda() throws IOException {
-        Map<String, String> buildImageCmdArguments = new HashMap<>();
-
-        getLog().info("Using GRAALVM_JVM_VERSION: " + graalVmJvmVersion());
-        getLog().info("Using GRAALVM_ARCH: " + graalVmArch());
+        var buildImageCmdArguments = new HashMap<String, String>();
 
         // Starter sets the right class in pom.xml:
         //   - For applications: io.micronaut.function.aws.runtime.MicronautLambdaRuntime
         //   - For function apps: com.example.BookLambdaRuntime
-        getLog().info("Using CLASS_NAME: " + mainClass);
         BuildImageCmd buildImageCmd = addNativeImageBuildArgs(buildImageCmdArguments, () -> {
             try {
                 return dockerService.buildImageCmd(DockerfileMojo.DOCKERFILE_AWS_CUSTOM_RUNTIME)
-                        .withBuildArg("GRAALVM_VERSION", graalVmVersion())
-                        .withBuildArg("GRAALVM_JVM_VERSION", graalVmJvmVersion())
-                        .withBuildArg("GRAALVM_ARCH", graalVmArch());
+                    .withBuildArg("GRAALVM_DOWNLOAD_URL", graalVmDownloadUrl());
             } catch (IOException e) {
                 throw new DockerClientException(e.getMessage(), e);
             }
@@ -172,8 +175,6 @@ public class DockerNativeMojo extends AbstractDockerMojo {
             dockerfileName = DockerfileMojo.DOCKERFILE_NATIVE_DISTROLESS;
         }
 
-        maybeUpdateBaseImageBasedOnArchitecture(runtime);
-
         buildDockerfile(dockerfileName, true);
     }
 
@@ -188,25 +189,17 @@ public class DockerNativeMojo extends AbstractDockerMojo {
         }
 
         String from = getFrom();
-        String port = getPort();
-        getLog().info("Exposing port: " + port);
+        String ports = getPorts();
+        getLog().info("Exposing port(s): " + ports);
 
         File dockerfile = dockerService.loadDockerfileAsResource(dockerfileName);
 
-        if (appArguments != null && !appArguments.isEmpty()) {
-            getLog().info("Using application arguments: " + appArguments);
-            com.google.common.io.Files.asCharSink(dockerfile, Charset.defaultCharset(), FileWriteMode.APPEND).write(System.lineSeparator() + getCmd());
-        }
+        oracleCloudFunctionCmd(dockerfile);
 
-        Map<String, String> buildImageCmdArguments = new HashMap<>();
+        var buildImageCmdArguments = new HashMap<String, String>();
 
-        getLog().info("Using BASE_IMAGE: " + from);
         if (StringUtils.isNotEmpty(baseImageRun) && Boolean.FALSE.equals(staticNativeImage)) {
             buildImageCmdArguments.put("BASE_IMAGE_RUN", baseImageRun);
-        }
-
-        if (baseImageRun.contains("alpine-glibc")) {
-            buildImageCmdArguments.put("EXTRA_CMD", "apk update && apk add libstdc++");
         }
 
         if (passClassName) {
@@ -214,10 +207,10 @@ public class DockerNativeMojo extends AbstractDockerMojo {
         }
 
         BuildImageCmd buildImageCmd = addNativeImageBuildArgs(buildImageCmdArguments, () -> dockerService.buildImageCmd()
-                .withDockerfile(dockerfile)
-                .withTags(getTags())
-                .withBuildArg("BASE_IMAGE", from)
-                .withBuildArg("PORT", port));
+            .withDockerfile(dockerfile)
+            .withTags(getTags())
+            .withBuildArg("BASE_IMAGE", from)
+            .withBuildArg("PORTS", ports));
 
         dockerService.buildImage(buildImageCmd);
     }
@@ -235,10 +228,7 @@ public class DockerNativeMojo extends AbstractDockerMojo {
             BuildImageCmd buildImageCmd = buildImageCmdSupplier.get();
 
             for (Map.Entry<String, String> buildArg : buildImageCmdArguments.entrySet()) {
-                String key = buildArg.getKey();
-                String value = buildArg.getValue();
-                getLog().info("Using " + key + ": " + value);
-                buildImageCmd.withBuildArg(key, value);
+                buildImageCmd.withBuildArg(buildArg.getKey(), buildArg.getValue());
             }
 
             getNetworkMode().ifPresent(buildImageCmd::withNetworkMode);

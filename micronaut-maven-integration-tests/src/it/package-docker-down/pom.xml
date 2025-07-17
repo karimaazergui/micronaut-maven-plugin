@@ -18,6 +18,8 @@
     <exec.mainClass>io.micronaut.build.examples.Application</exec.mainClass>
     <packaging>jar</packaging>
     <micronaut.runtime>netty</micronaut.runtime>
+    <maven.native.plugin.version>@native-maven-plugin.version@</maven.native.plugin.version>
+    <jib-maven-plugin.version>@jib-maven-plugin.version@</jib-maven-plugin.version>
   </properties>
 
   <dependencies>
@@ -47,8 +49,8 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>javax.annotation</groupId>
-      <artifactId>javax.annotation-api</artifactId>
+      <groupId>jakarta.annotation</groupId>
+      <artifactId>jakarta.annotation-api</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -105,7 +107,7 @@
         <artifactId>jib-maven-plugin</artifactId>
         <configuration>
           <to>
-            <image>docker.io/alvarosanchez/demo:${project.version}</image>
+            <image>docker.io/alvarosanchez/${project.artifactId}:${project.version}</image>
           </to>
         </configuration>
       </plugin>

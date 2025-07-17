@@ -15,6 +15,7 @@
  */
 package io.micronaut.maven.services;
 
+import io.micronaut.core.util.StringUtils;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
@@ -22,7 +23,6 @@ import org.apache.maven.plugin.BuildPluginManager;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.invoker.DefaultInvocationRequest;
-import org.apache.maven.shared.invoker.InvocationRequest;
 import org.apache.maven.shared.invoker.InvocationResult;
 import org.apache.maven.shared.invoker.Invoker;
 import org.apache.maven.shared.invoker.MavenInvocationException;
@@ -36,9 +36,15 @@ import javax.inject.Singleton;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.twdata.maven.mojoexecutor.MojoExecutor.*;
+import static io.micronaut.maven.testresources.TestResourcesConfiguration.TEST_RESOURCES_ENABLED_PROPERTY;
+import static org.twdata.maven.mojoexecutor.MojoExecutor.configuration;
+import static org.twdata.maven.mojoexecutor.MojoExecutor.executeMojo;
+import static org.twdata.maven.mojoexecutor.MojoExecutor.executionEnvironment;
+import static org.twdata.maven.mojoexecutor.MojoExecutor.goal;
+import static org.twdata.maven.mojoexecutor.MojoExecutor.plugin;
 
 /**
  * Provides methods to execute goals on the current project.
@@ -76,17 +82,17 @@ public class ExecutorService {
     public void executeGoal(String pluginKey, String goal) throws MojoExecutionException {
         final Plugin plugin = mavenProject.getPlugin(pluginKey);
         if (plugin != null) {
-            AtomicReference<String> executionId = new AtomicReference<>(goal);
+            var executionId = new AtomicReference<>(goal);
             if (goal != null && goal.indexOf('#') > -1) {
                 int pos = goal.indexOf('#');
                 executionId.set(goal.substring(pos + 1));
                 goal = goal.substring(0, pos);
             }
             Optional<PluginExecution> execution = plugin
-                    .getExecutions()
-                    .stream()
-                    .filter(e -> e.getId().equals(executionId.get()))
-                    .findFirst();
+                .getExecutions()
+                .stream()
+                .filter(e -> e.getId().equals(executionId.get()))
+                .findFirst();
             Xpp3Dom configuration;
             if (execution.isPresent()) {
                 configuration = (Xpp3Dom) execution.get().getConfiguration();
@@ -118,6 +124,7 @@ public class ExecutorService {
 
     /**
      * Executes a goal using the Maven shared invoker.
+     *
      * @param pluginKey The plugin coordinates in the format groupId:artifactId
      * @param goal The goal to execute
      * @return The result of the invocation
@@ -129,23 +136,42 @@ public class ExecutorService {
 
     /**
      * Executes a goal using the Maven shared invoker.
+     *
      * @param goals The goals to execute
      * @return The result of the invocation
      * @throws MavenInvocationException If the goal execution fails
      */
     public InvocationResult invokeGoals(String... goals) throws MavenInvocationException {
-        InvocationRequest request = new DefaultInvocationRequest();
-        request.setPomFile(mavenProject.getFile());
+        return invokeGoals(mavenProject, goals);
+    }
+
+    /**
+     * Executes a goal using the Maven shared invoker.
+     *
+     * @param project The Maven project
+     * @param goals The goals to execute
+     * @return The result of the invocation
+     * @throws MavenInvocationException If the goal execution fails
+     */
+
+    public InvocationResult invokeGoals(MavenProject project, String... goals) throws MavenInvocationException {
+        var request = new DefaultInvocationRequest();
+        request.setPomFile(project.getFile());
         File settingsFile = mavenSession.getRequest().getUserSettingsFile();
         if (settingsFile.exists()) {
             request.setUserSettingsFile(settingsFile);
         }
+        var properties = new Properties();
+        properties.put(TEST_RESOURCES_ENABLED_PROPERTY, StringUtils.FALSE);
+
         request.setLocalRepositoryDirectory(new File(mavenSession.getLocalRepository().getBasedir()));
-        request.setGoals(Arrays.asList(goals));
+        request.addArgs(Arrays.asList(goals));
         request.setBatchMode(true);
         request.setQuiet(true);
+        request.setAlsoMake(true);
         request.setErrorHandler(LOG::error);
         request.setOutputHandler(LOG::info);
+        request.setProperties(properties);
         return invoker.execute(request);
     }
 }

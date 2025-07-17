@@ -5,21 +5,23 @@ on:
     branches:
       - master
       - '[1-9]+.[0-9]+.x'
+      - central-portal
   pull_request:
     branches:
       - master
       - '[1-9]+.[0-9]+.x'
+      - central-portal
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java: ['17']
+        java: ['17', '21']
     env:
-      GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
-      GRADLE_ENTERPRISE_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USERNAME }}
-      GRADLE_ENTERPRISE_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+      DEVELOCITY_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USERNAME }}
+      DEVELOCITY_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
       OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
       OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
       OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
@@ -27,87 +29,85 @@ jobs:
       OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
       GRAALVM_QUICK_BUILD: true
     steps:
-      - name: Check out Git repository
+      - name: "📥 Checkout repository"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
 
-      - name: Install Java and Maven and set up Apache Maven Central
+      - name: "🔐 Setup GPG keyring"
+        env:
+          GPG_FILE: ${{ secrets.GPG_FILE }}
+        run: |
+          mkdir ~/.gnupg && echo "$GPG_FILE" | base64 -d > ~/.gnupg/secring.gpg
+          
+          # Verify gpg secret key
+          gpg --list-secret-keys --keyid-format LONG
+
+      - name: "☕️ Install Java and Maven and set up Apache Maven Central"
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
-          server-password: GH_TOKEN
+          cache: 'maven'
+          server-id: central
+          server-username: SONATYPE_USERNAME
+          server-password: SONATYPE_PASSWORD
+          gpg-passphrase: GPG_PASSWORD
 
-      - name: Setup GraalVM CE
-        uses: graalvm/setup-graalvm@v1
+      - name: "🔧 Setup GraalVM CE"
+        uses: graalvm/setup-graalvm@v1.3.4
         with:
+          distribution: 'graalvm'
           java-version: ${{ matrix.java }}
-          distribution: 'graalvm-community'
-          components: 'native-image'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Maven packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+      - name: "⏬ Eagerly pull Docker images"
+        run: |
+          docker pull postgres:latest
 
-      - name: Log into OCIR
-        uses: oracle-actions/login-ocir@v1.2
-        id: login-ocir
-        with:
-          auth_token: ${{ secrets.OCI_AUTH_TOKEN }}
-
-      - name: Run tests
+      - name: "🧪 Run tests"
         run: |
           ./mvnw -q install -Dinvoker.skip=true && ./mvnw verify
 
-      - name: Publish Test Report
+      - name: "📊 Publish Test Report"
         if: always()
-        uses: mikepenz/action-junit-report@v4.0.3
+        uses: mikepenz/action-junit-report@v5.6.2
         with:
           check_name: Java CI / Test Report
           report_paths: '**/target/invoker-reports/TEST-*.xml'
           check_retries: 'true'
 
-      - name: Run static analysis
-        if: github.repository_owner == 'micronaut-projects'
+      - name: "🔎 Run static analysis"
+        if: env.SONAR_TOKEN != '' && matrix.java == '17'
         run: ./mvnw sonar:sonar
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine current version
+      - name: "❓ Determine current version"
+        if: success() && github.event_name == 'push' && matrix.java == '17'
         id: release_version
         run: echo ::set-output name=release_version::`./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout`
 
-      - name: Generate site
-        if: success() && github.event_name == 'push'
+      - name: "🌎 Generate site"
+        if: success() && github.event_name == 'push' && matrix.java == '17'
         run: |
           ./mvnw site:site
           cp -R target/site/apidocs/* micronaut-maven-plugin/target/site/apidocs
 
-      - name: Publish to Github Pages
-        if: success() && github.event_name == 'push'
+      - name: "📑 Publish to Github Pages"
+        if: success() && github.event_name == 'push' && matrix.java == '17'
         uses: micronaut-projects/github-pages-deploy-action@master
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          BASE_BRANCH: master
           BRANCH: gh-pages
           FOLDER: micronaut-maven-plugin/target/site
 
-      - name: Set up Maven
-        if: success() && github.event_name == 'push' && endsWith(steps.release_version.outputs.release_version, 'SNAPSHOT')
-        uses: stCarolas/setup-maven@v4.5
-        with:
-          maven-version: 3.9.0
-
-      - name: Deploy snapshot
-        if: success() && github.event_name == 'push' && endsWith(steps.release_version.outputs.release_version, 'SNAPSHOT')
-        uses: samuelmeuli/action-maven-publish@v1
-        with:
-          maven_args: "-Dinvoker.skip=true"
-          nexus_username: ${{ secrets.SONATYPE_USERNAME }}
-          nexus_password: ${{ secrets.SONATYPE_PASSWORD }}
+      - name: "📦 Deploy snapshot"
+        if: success() && github.event_name == 'push' && endsWith(steps.release_version.outputs.release_version, 'SNAPSHOT') && matrix.java == '17'
+        run: |
+          ./mvnw deploy -Dinvoker.skip
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}

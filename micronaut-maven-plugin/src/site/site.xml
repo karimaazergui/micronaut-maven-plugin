@@ -4,7 +4,7 @@
     <skin>
         <groupId>org.apache.maven.skins</groupId>
         <artifactId>maven-fluido-skin</artifactId>
-        <version>1.11.1</version>
+        <version>2.0.0-M11</version>
     </skin>
 
     <edit>${project.scm.url}</edit>
@@ -28,6 +28,8 @@
             <item name="Using Micronaut AOT" href="examples/aot.html"/>
             <item name="Integration with Micronaut Test Resources" href="examples/test-resources.html"/>
             <item name="Generating OpenAPI clients or servers" href="examples/openapi.html"/>
+            <item name="Importing beans from project dependencies" href="examples/bean-import.html"/>
+            <item name="Generating Sources from JSON Schema" href="examples/jsonschema.html"/>
         </menu>
 
         <menu ref="reports"/>
